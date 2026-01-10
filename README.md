@@ -79,25 +79,68 @@ Esta função estabelece a arquitetura da rede, sendo responsável pela iniciali
     
     Por fim, é de novo usado o nn.Linear para receber os 256 conceitos da camada anterior e reduzir para as 10 classes finais.
     
-    
 
 __forward__
+Esta função define como os dados fluem através da rede, ou seja, conecta as camadas definidas no __init__. É executada sempre que se passa um lote de imagens para a rede e conta com os seguintes processos:
 
-Esta função define como os dados fluem através da rede, ou seja, conecta as camadas definidas no __init__. É executada sempre que se passa um lote de imagens para a rede.
-
-    Pipeline de Ativação: Os dados passam sequencialmente pelos três blocos definidos. Em cada bloco, aplica-se a ordem: Convolução → Batch Normalization → ReLU → Pooling. A função torch.relu(x) é aplicada explicitamente aqui para introduzir não-linearidade no sistema. Sem isto, a rede comportar-se-ia como uma simples regressão linear, independentemente da sua profundidade.
+    Sequência de Ativação: Os dados passam sequencialmente pelos três blocos definidos. Em cada bloco, aplica-se a ordem: Convolução → Batch Normalization → ReLU → Pooling. A função torch.relu(x) é aplicada explicitamente aqui para introduzir não-linearidade no sistema. Sem isto, a rede comportar-se-ia como uma simples regressão linear, incapaz de combinar os sinais de forma inteligente para detetar padrões complexos.
 
     Achatamento (Flatten): A saída do último bloco convolucional é um tensor 3D (128 canais x 3 x 3). A função x.view(-1, ...) transforma este tensor num vetor unidimensional (achatamento), formato necessário para alimentar as camadas densas (Linear) seguintes.
 
-    Classificação Final: O vetor resultante passa pela camada densa, pela ativação ReLU e pelo Dropout. Finalmente, a última camada fc2 projeta o resultado em 10 saídas (correspondentes aos dígitos 0-9). Note-se que não se aplica Softmax aqui, pois a função de perda utilizada no treino (CrossEntropy ou similar no PyTorch) geralmente já inclui essa operação internamente ou espera os logits "crus", embora para a inferência final seja interpretado como probabilidades.
+    Classificação Final: O vetor resultante passa pela camada densa (fc1), pela ativação ReLU e pelo Dropout. Finalmente, a última camada fc2 projeta o resultado em 10 saídas (correspondentes aos dígitos 0-9). 
 
-getNumberOfParameters Uma função utilitária auxiliar que percorre todos os parâmetros da rede (self.parameters()) e soma o número total de elementos treináveis (p.numel()). Isto permite verificar a complexidade do modelo ao iniciar o programa.
         
-        
-        
-#### 2.3. Otimização e Treino --trainer
-* **Otimizador:** Utilizámos o **Adam**, que ajusta automaticamente a taxa de aprendizagem, acelerando a convergência.
-* **Função de Ativação:** `ReLU` em todas as camadas ocultas e `Softmax` na saída.
-* **Early Saving:** O estado do modelo é guardado apenas quando se verifica uma melhoria na perda de validação (*Validation Loss*), garantindo que o modelo final é o mais generalista.
+#### 2.3. Ciclo de Treino (trainer.py)
+O processo de aprendizagem é realizado através da classe Trainer. Esta classe não herda de módulos do PyTorch, funcionando antes como um controlador que integra os dados (datasets), o modelo (model) e as regras de otimização. A classe é estruturada em torno das funções principais __init__ e train, métodos auxiliares e visualização (saveTrain, loadTrain, draw) e, finalmente, a função de avaliação evaluate.
 
-### 2.4. main_classification
+__init__ 
+Este método estabelece a infraestrutura necessária para o ciclo de treino, inicializando os componentes responsáveis pelo processamento dos dados e pela quantificação do erro.
+
+    DataLoader: A classe torch.utils.data.DataLoader é fundamental para a gestão eficiente da memória. Em vez de carregar todas as imagens de uma vez, ela fornece os dados em pequenos lotes (batches) definidos pelo argumento batch_size. Para o conjunto de treino, utiliza-se shuffle=True, o que baralha os dados a cada época (epoch). Isto é crucial para garantir que o modelo não memoriza a ordem das imagens e para que os gradientes sejam mais representativos da distribuição geral dos dados. Para o conjunto de teste, o shuffle=False mantém a ordem, permitindo uma avaliação determinística.
+
+    nn.MSELoss: Define a função de custo (Loss Function). Neste caso, optou-se pelo Erro Quadrático Médio (Mean Squared Error) que calcula a média das diferenças ao quadrado entre o vetor de probabilidade previsto pela rede e o vetor real. O objetivo do treino será minimizar este valor.
+
+    torch.optim.Adam: A otimização é feita através do algoritmo Adam (Adaptive Moment Estimation) que atualiza os pesos da rede com base nos gradientes calculados. A taxa de aprendizagem (lr=0.001) define o tamanho do passo que o otimizador dá em direção ao mínimo do erro; um valor equilibrado é essencial para evitar que o treino estagne ou oscile excessivamente.
+
+
+__train__ 
+Esta função contém o ciclo principal (Loop) de treino e validação, iterando pelo número de épocas definido (num_epochs).
+
+    Modo de Treino e Backpropagation: Ao invocar self.model.train(), a rede ativa camadas específicas como Dropout e Batch Normalization. Para cada lote de imagens realiza-se a previsão (forward), calcula-se o erro (loss), o loss.backward() calcula os gradientes (a direção em que os pesos devem mudar) e o optimizer.step() atualiza efetivamente os pesos.
+
+    Modo de Avaliação: Em cada época, o modelo é também testado (self.model.eval()) com dados que nunca viu. Aqui, o cálculo de gradientes é desligado para poupar memória, servindo apenas para monitorizar a capacidade de generalização da rede.
+
+    Monitorização (Draw e Save): No final de cada época, a função draw utiliza o matplotlib para atualizar o gráfico das curvas de perda (treino vs teste), permitindo detetar visualmente fenómenos de Overfitting (quando o erro de treino desce, mas o de teste sobe). Simultaneamente, o saveTrain guarda o estado do modelo (checkpoint.pkl) e, caso o erro de teste seja o menor histórico, guarda uma cópia de "melhor modelo" (best.pkl).
+
+
+__evaluate__ 
+Executada automaticamente após o fim do treino, esta função utiliza a biblioteca sklearn.metrics para uma análise rigorosa da performance do modelo, indo além da simples precisão.
+
+    Agregação de Previsões: A função percorre todo o conjunto de teste para compilar dois vetores globais: as classes reais (gt_classes) e as classes previstas (predicted_classes), obtidas através da função argmax que seleciona o neurónio com maior ativação na saída.
+
+    Matriz de Confusão: Utiliza-se a metrics.confusion_matrix em conjunto com a biblioteca seaborn para gerar um mapa de calor (Heatmap). Esta visualização permite identificar quais as classes que o modelo confunde entre si (ex.: se o dígito 3 é frequentemente classificado como 8).
+
+    Relatório de Métricas: A função metrics.classification_report calcula métricas detalhadas para cada classe individualmente e a sua média global (macro average):
+    -Precision: De todas as vezes que a rede previu o dígito X, quantas vezes estava correta?
+    -Recall: De todos os dígitos X que realmente existiam, quantos a rede encontrou?
+    -F1-Score: Uma média harmónica entre Precision e Recall, ideal para avaliar o equilíbrio do modelo. Estes dados são exportados para um ficheiro JSON (statistics.json).
+
+
+#### 2.4. Execução (main_classification.py)
+Este módulo assume um papel central na coordenação do sistema: processa os argumentos de entrada, prepara o ambiente experimental, instancia as classes fundamentais (Dataset, Modelo, Trainer) e despoleta o ciclo de treino inicia o processo de aprendizagem.
+
+O código está estruturado numa função main() e conta com um mecanismo de interrupção (sigintHandler) para garantir que o programa encerra corretamente caso o utilizador pressione Ctrl+C, evitando a corrupção de ficheiros ou logs pendentes.
+
+Os principais argumentos definidos (através do argparse) são:
+    --num_epochs: O número de vezes que a rede verá o dataset completo (ciclos de treino).
+    --batch_size: A quantidade de imagens processadas simultaneamente antes de uma atualização de pesos.
+    --experiment_path: O diretório onde serão guardados os resultados (gráficos, checkpoints e estatísticas).
+    --resume_training: Uma flag booleana que, se ativada, instrui o sistema a procurar um checkpoint existente e continuar o treino a partir desse ponto.
+
+Antes de iniciar o processamento, o script prepara o sistema de ficheiros. Utiliza a função os.makedirs para garantir que o diretório de destino (experiment_full_name) existe. Isto garante que os ficheiros gerados (gráficos de perda, matrizes de confusão) ficam salvaguardados e organizados como pretendido.
+
+Posteriormente, são defenidos os datasets de treino e teste através da classe Dataset e é elecionado o modelo a utilizar, neste caso, o ModelBetterCNN.
+
+Após isto realiza-se a verificação de integridade (Sanity Check), na qual o código executa um teste preliminar manual. Extrai-se uma única imagem do dataset e aplica-se a função unsqueeze(0). Este passo é essencial uma vez que as redes em PyTorch esperam receber dados em lotes com 4 dimensões (Batch, Canais, Altura, Largura), mas uma imagem isolada tem apenas 3. O unsqueeze adiciona artificialmente a dimensão do lote (tamanho 1). A imagem é passada pela função forward do modelo. Se este passo não gerar erros de dimensão ou memória, confirma-se que a arquitetura está compatível com os dados de entrada.
+
+Por fim, dá-se início à classe Trainer, recebendo os argumentos, os datasets e o modelo. O método trainer.train() é invocado para iniciar o loop de aprendizagem. Após a conclusão das épocas, o método trainer.evaluate() é chamado explicitamente para correr o modelo no conjunto de teste e gerar as métricas finais de desempenho (Precisão, Recall, F1-Score e Matriz de Confusão).
