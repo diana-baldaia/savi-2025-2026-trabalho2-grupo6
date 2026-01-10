@@ -56,28 +56,21 @@ A classe é constituída fundamentalmente por duas funções descritas abaixo: _
 
 __init__ 
 Esta função estabelece a arquitetura da rede, sendo responsável pela inicialização das camadas com parâmetros treináveis. O objetivo é construir uma arquitetura hierárquica capaz de extrair características visuais complexas.
-    
-    Blocos Convolucionais: Foram definidos três blocos sequenciais de extração de características. A profundidade dos filtros aumenta progressivamente (32 → 64 → 128), permitindo que a rede aprenda desde arestas simples nas primeiras camadas até formas complexas nas últimas.
-    Cada bloco é composto por:
 
+- Blocos Convolucionais: Foram definidos três blocos sequenciais de extração de características. A profundidade dos filtros aumenta progressivamente (32 → 64 → 128), permitindo que a rede aprenda desde arestas simples nas primeiras camadas até formas complexas nas últimas. Cada bloco é composto por:
     nn.Conv2d: Esta é a camada convolucional e tem como parâmetros: 
     - o número de canais da imagem de entrada, como é em tons de cinza apenas tem 1 canal no primeiro bloco, posteriormente passa a ter 32 e no último 64; 
     - o número de "mapas" de características a obter, 32 no primeiro, 64 no segundo e por fim 128;
     - kernel_size=3, indicando o tamanho da janela que desliza pela imagem, no caso é uma matriz 3x3;
     - padding=1, adiciona uma "moldura" de 1 píxel de zeros à volta da imagem original, de modo a que o resultado seja da mesma dimensão da imagem de entrada (ex.: 28x28 no primeiro bloco)
-
     nn.BatchNorm2d: Normaliza as saídas de cada canal convolucional recebendo os resultados dos mapas de características e ajustando os valores para que a média seja próxima de 0 e o desvio padrão próximo de 1. Isto estabiliza a distribuição das ativações, permitindo treinos mais rápidos e com taxas de aprendizagem mais elevadas.
-
     nn.MaxPool2d: Divide a imagem em blocos de 2x2 pixéis (kernel_size=2) e, de cada bloco, escolhe apenas o valor mais alto. O parâmetro stride=2 induz um salto de 2 em 2 pixéis de modo a que não haja sobreposição. Isto permite que a imagem seja reduzida para metade da sua dimensão (28x28 --> 14x14 --> 7x7 --> 3x3). Esta redução não só diminui o custo computacional como também faz com que a rede se foque nas características mais relevantes, ignorando ruído ou variações de posição.
 
-
-    Classificador: Após a extração de características, define-se o classificador final.
-
+- Classificador: Após a extração de características, define-se o classificador final.
     nn.Linear: Primeiramente, os dados precisam de ser "achatados" (flatten) para poderem passar para a camada Linear. Assim, o primeiro parâmetro é o resultado da multiplicação entre o número de canais que saíram da última camada convolucional (128) e o tamanho final (3x3), resultando em 1152 sinais. Estes sinais são então combinados para formar 256 novos conceitos (neurónios - o segundo parâmetro a indicar).
-
     nn.Dropout: O Dropout é importante para evitar o Overfitting. Durante o treino ele coloca a zero ("desliga") 50% dos neurónios (parâmetro a definir) de forma aleatória em cada iteração. Isto evita a elevada dependência de apenas alguns neurónios, forçando a rede a encontrar padrões alternativos para chegar à resposta correta. Melhora também a generalização e escalabilidade do modelo.
-    
-    Por fim, é de novo usado o nn.Linear para receber os 256 conceitos da camada anterior e reduzir para as 10 classes finais.
+
+Por fim, é de novo usado o nn.Linear para receber os 256 conceitos da camada anterior e reduzir para as 10 classes finais.
     
     
 
@@ -85,19 +78,13 @@ __forward__
 
 Esta função define como os dados fluem através da rede, ou seja, conecta as camadas definidas no __init__. É executada sempre que se passa um lote de imagens para a rede.
 
-    Pipeline de Ativação: Os dados passam sequencialmente pelos três blocos definidos. Em cada bloco, aplica-se a ordem: Convolução → Batch Normalization → ReLU → Pooling. A função torch.relu(x) é aplicada explicitamente aqui para introduzir não-linearidade no sistema. Sem isto, a rede comportar-se-ia como uma simples regressão linear, independentemente da sua profundidade.
+Pipeline de Ativação: Os dados passam sequencialmente pelos três blocos definidos. Em cada bloco, aplica-se a ordem: Convolução → Batch Normalization → ReLU → Pooling. A função torch.relu(x) é aplicada explicitamente aqui para introduzir não-linearidade no sistema. Sem isto, a rede comportar-se-ia como uma simples regressão linear, independentemente da sua profundidade.
 
-    Achatamento (Flatten): A saída do último bloco convolucional é um tensor 3D (128 canais x 3 x 3). A função x.view(-1, ...) transforma este tensor num vetor unidimensional (achatamento), formato necessário para alimentar as camadas densas (Linear) seguintes.
+Achatamento (Flatten): A saída do último bloco convolucional é um tensor 3D (128 canais x 3 x 3). A função x.view(-1, ...) transforma este tensor num vetor unidimensional (achatamento), formato necessário para alimentar as camadas densas (Linear) seguintes.
 
-    Classificação Final: O vetor resultante passa pela camada densa, pela ativação ReLU e pelo Dropout. Finalmente, a última camada fc2 projeta o resultado em 10 saídas (correspondentes aos dígitos 0-9). Note-se que não se aplica Softmax aqui, pois a função de perda utilizada no treino (CrossEntropy ou similar no PyTorch) geralmente já inclui essa operação internamente ou espera os logits "crus", embora para a inferência final seja interpretado como probabilidades.
-
-getNumberOfParameters Uma função utilitária auxiliar que percorre todos os parâmetros da rede (self.parameters()) e soma o número total de elementos treináveis (p.numel()). Isto permite verificar a complexidade do modelo ao iniciar o programa.
-        
-        
+Classificação Final: O vetor resultante passa pela camada densa, pela ativação ReLU e pelo Dropout. Finalmente, a última camada fc2 projeta o resultado em 10 saídas (correspondentes aos dígitos 0-9). Note-se que não se aplica Softmax aqui, pois a função de perda utilizada no treino (CrossEntropy ou similar no PyTorch) geralmente já inclui essa operação internamente ou espera os logits "crus", embora para a inferência final seja interpretado como probabilidades.
+  
         
 #### 2.3. Otimização e Treino --trainer
-* **Otimizador:** Utilizámos o **Adam**, que ajusta automaticamente a taxa de aprendizagem, acelerando a convergência.
-* **Função de Ativação:** `ReLU` em todas as camadas ocultas e `Softmax` na saída.
-* **Early Saving:** O estado do modelo é guardado apenas quando se verifica uma melhoria na perda de validação (*Validation Loss*), garantindo que o modelo final é o mais generalista.
 
 ### 2.4. main_classification
