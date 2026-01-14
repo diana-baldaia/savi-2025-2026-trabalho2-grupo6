@@ -13,7 +13,7 @@ from tqdm import tqdm
 # Para correr sem o aviso do NNPACK
 # python3 main_sliding_window.py 2>/dev/null
 
-def nms(boxes, iou_threshold=0.3):
+def nms(boxes, iou_threshold):
     """
     Non-Maximum Suppression: Remove caixas sobrepostas que detetam o mesmo objeto.
     boxes: lista de (x, y, w, h, label, score)
@@ -50,7 +50,7 @@ def nms(boxes, iou_threshold=0.3):
     return [boxes[i] for i in keep]
 
 
-def detect_and_save(image_path, model, device, output_path, stride=4, threshold=0.95):
+def detect_and_save(image_path, model, device, output_path, stride=4, threshold=0.98):
     """Processa uma única imagem e guarda o resultado visual."""
     WINDOW_SIZE = 28
     full_image = Image.open(image_path).convert('L')
@@ -59,22 +59,25 @@ def detect_and_save(image_path, model, device, output_path, stride=4, threshold=
     
     raw_detections = []
     
-    # Scanner
+    # Sliding Window
     for y in range(0, height - WINDOW_SIZE + 1, stride):
         for x in range(0, width - WINDOW_SIZE + 1, stride):
             crop = full_image.crop((x, y, x + WINDOW_SIZE, y + WINDOW_SIZE))
             crop_tensor = to_tensor(crop).unsqueeze(0).to(device)
 
-            if crop_tensor.std() < 0.1: continue # Ignora zonas vazias (pretas)
+            if crop_tensor.std() < 0.1: continue        # Ignora zonas vazias (pretas)
 
+            # Os recortes são submetidos ao modelo ModelBetterCNN
             with torch.no_grad():
                 output = model(crop_tensor)
                 probs = torch.softmax(output, dim=1)
                 max_prob, pred = torch.max(probs, 1)
-                
+
+                # Apenas guarda deteções acima do threshold
                 if max_prob.item() > threshold:
                     raw_detections.append((x, y, WINDOW_SIZE, WINDOW_SIZE, pred.item(), max_prob.item()))
 
+    # Aplica Non-Maximum Suppression para filtrar deteções redundantes
     final_detections = nms(raw_detections, iou_threshold=0.2)
 
     # Visualização e Gravação
