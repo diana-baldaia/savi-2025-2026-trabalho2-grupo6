@@ -1,4 +1,4 @@
-# savi-2025-2026-trabalho2-grupo5
+# savi-2025-2026-trabalho2-grupo6
 
 
 ## Tarefa 1
@@ -401,13 +401,18 @@ exemplo mau:
 ### 4. Conclusão
 Através dos resultados obtidos verifica-se que o método embora seja capaz de detetar maior parte dos dígitos, devido ao ruído que gera, não é um bom método para identificação de objetos. O método da janela deslizante teria de sofrer melhorias consideráveis para produzir resulatos favoráveis.
 
+#
 ## Tarefa 4
 
 ### 1. Objetivo
-
+A Tarefa 4 visa refinar o sistema de deteção desenvolvido anteriormente, atacando as suas limitações principais: a elevada taxa de falsos positivos em áreas de fundo complexo e a incapacidade de detetar objetos de dimensões variadas com precisão. Para tal, implementou-se uma estratégia dupla:
+- Re-treino com _Hard Negative Mining_: O modelo é reeducado para distinguir ativamente entre "dígitos completos" e "fragmentos de dígitos" (falsos positivos difíceis).
+- Abordagem Multi-Escala: O algoritmo passa a varrer a imagem com janelas de diferentes tamanhos, garantindo que objetos maiores ou menores que o padrão sejam capturados corretamente.
 
 ### 2. Metodologia
+O código (`main_improved_detection.py`) apresenta uma evolução significativa face à Tarefa 3, introduzindo lógica avançada tanto na preparação dos dados como no pós-processamento. É composto por duas classes, `ModelImproved` que define a arquitetura do modelo e `ComplexSceneDataset` que cria o _dataset_ melhorado. Contém ainda funções que definem o treino, funções que filtram os resultados e funções para a avaliação do modelo.
 
+#### 2.1. 
 
 ### 3. Resultados
 
